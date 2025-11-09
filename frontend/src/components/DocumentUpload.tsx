@@ -27,7 +27,8 @@ export default function DocumentUpload({ onDocumentUploaded, refreshKey }: Docum
 
   const fetchDocuments = async () => {
     try {
-      const response = await axios.get('/api/documents')
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://ragchat12481-backend.gentlecoast-36ec39ac.westeurope.azurecontainerapps.io'
+      const response = await axios.get(`${backendUrl}/documents`)
       setDocuments(response.data.documents)
     } catch (error) {
       console.error('Error fetching documents:', error)
@@ -44,7 +45,8 @@ export default function DocumentUpload({ onDocumentUploaded, refreshKey }: Docum
     setUploadStatus(null)
 
     try {
-      await axios.post('/api/upload', formData, {
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://ragchat12481-backend.gentlecoast-36ec39ac.westeurope.azurecontainerapps.io'
+      await axios.post(`${backendUrl}/upload`, formData, {
         headers: {
           'Content-Type': 'multipart/form-data'
         }
@@ -97,7 +99,8 @@ export default function DocumentUpload({ onDocumentUploaded, refreshKey }: Docum
 
   const deleteDocument = async (documentId: string) => {
     try {
-      await axios.delete(`/api/documents/${documentId}`)
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://ragchat12481-backend.gentlecoast-36ec39ac.westeurope.azurecontainerapps.io'
+      await axios.delete(`${backendUrl}/documents/${documentId}`)
       fetchDocuments()
     } catch (error) {
       console.error('Error deleting document:', error)
