@@ -41,7 +41,8 @@ export default function ChatInterface() {
     setIsLoading(true)
 
     try {
-      const response = await axios.post<ChatResponse>('/api/chat', {
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://ragchat12481-backend.gentlecoast-36ec39ac.westeurope.azurecontainerapps.io'
+      const response = await axios.post<ChatResponse>(`${backendUrl}/chat`, {
         message: input,
         conversation_id: conversationId
       })
