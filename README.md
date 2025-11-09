@@ -233,4 +233,4 @@ This project is open source and available under the [MIT License](LICENSE).
 
 Once deployed, the application will be available at:
 - **Frontend**: https://zealous-grass-0c5e85103.3.azurestaticapps.net
-- **Backend API**: Will be provided after Container Apps deployment
+- **Backend API**: Will be provided after Container Apps deployment# Trigger CI/CD Pipeline
