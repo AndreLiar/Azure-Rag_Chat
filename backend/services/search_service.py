@@ -48,7 +48,7 @@ class SearchService:
         try:
             # Check if index exists
             self.index_client.get_index(self.index_name)
-        except:
+        except Exception:
             # Create index
             fields = [
                 SimpleField(name="id", type=SearchFieldDataType.String, key=True),

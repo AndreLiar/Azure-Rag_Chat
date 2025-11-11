@@ -1,16 +1,17 @@
+import os
+from typing import List, Optional
+
+from dotenv import load_dotenv
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import List, Optional
-import os
-from dotenv import load_dotenv
+
+from services.chat_service import ChatService
+from services.document_service import DocumentService
+from services.search_service import SearchService
 
 # Load environment variables
 load_dotenv()
-
-from services.search_service import SearchService
-from services.document_service import DocumentService
-from services.chat_service import ChatService
 
 app = FastAPI(
     title="RAG Chat API",

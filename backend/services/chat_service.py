@@ -97,19 +97,21 @@ class ChatService:
 
     def _build_system_prompt(self, context: str) -> str:
         """Build the system prompt with context"""
-        return f"""You are a helpful AI assistant that answers questions based on the provided documents. 
-        
-Use the following documents to answer the user's question. If the information is not available in the documents, say so clearly.
-
-Available Documents:
-{context}
-
-Instructions:
-- Answer based primarily on the provided documents
-- Be accurate and cite specific information when possible
-- If you're not sure about something, express uncertainty
-- Keep responses clear and helpful
-- If no relevant information is found in the documents, state this clearly"""
+        return (
+            f"You are a helpful AI assistant that answers questions "
+            f"based on the provided documents.\n\n"
+            f"Use the following documents to answer the user's question. "
+            f"If the information is not available in the documents, "
+            f"say so clearly.\n\n"
+            f"Available Documents:\n{context}\n\n"
+            f"Instructions:\n"
+            f"- Answer based primarily on the provided documents\n"
+            f"- Be accurate and cite specific information when possible\n"
+            f"- If you're not sure about something, express uncertainty\n"
+            f"- Keep responses clear and helpful\n"
+            f"- If no relevant information is found in the documents, "
+            f"state this clearly"
+        )
 
     def get_conversation_history(self, conversation_id: str) -> List[Dict[str, str]]:
         """Get conversation history"""
