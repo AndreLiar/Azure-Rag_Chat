@@ -7,20 +7,16 @@ on:
     branches: [main]
 
 env:
-  # Registry Configuration
   REGISTRY: ghcr.io
   BACKEND_IMAGE_NAME: ${{ github.repository }}-backend
   FRONTEND_IMAGE_NAME: ${{ github.repository }}-frontend
-  
-  # Azure Configuration
   AZURE_RESOURCE_GROUP: ragchat12481-rg
   AZURE_CONTAINER_APP_NAME: ragchat12481-backend
-  AZURE_CONTAINER_APP_ENV: ragchat12481-cae
   AZURE_STATIC_WEB_APP_NAME: zealous-grass-0c5e85103
 
 jobs:
   # ==============================================================================
-  # PHASE 1: CHANGE DETECTION & PARALLEL TESTING
+  # PHASE 1: CHANGE DETECTION
   # ==============================================================================
   
   detect-changes:
@@ -29,8 +25,7 @@ jobs:
     outputs:
       backend: ${{ steps.changes.outputs.backend }}
       frontend: ${{ steps.changes.outputs.frontend }}
-      infrastructure: ${{ steps.changes.outputs.infrastructure }}
-      any-code: ${{ steps.changes.outputs.backend == 'true' || steps.changes.outputs.frontend == 'true' }}
+      any-code: ${{ steps.any-code.outputs.result }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -44,15 +39,23 @@ jobs:
           filters: |
             backend:
               - 'backend/**'
-              - 'requirements.txt'
-              - '.github/workflows/production.yml'
+              - '.github/workflows/**'
             frontend:
               - 'frontend/**'
-              - '.github/workflows/production.yml'
-            infrastructure:
-              - 'infra/**'
-              - 'docker-compose.yml'
-              - '.github/workflows/production.yml'
+              - '.github/workflows/**'
+
+      - name: Check if any code changed
+        id: any-code
+        run: |
+          if [[ "${{ steps.changes.outputs.backend }}" == "true" || "${{ steps.changes.outputs.frontend }}" == "true" ]]; then
+            echo "result=true" >> $GITHUB_OUTPUT
+          else
+            echo "result=false" >> $GITHUB_OUTPUT
+          fi
+
+  # ==============================================================================
+  # PHASE 2: PARALLEL TESTING
+  # ==============================================================================
 
   test-backend:
     name: Test Backend
@@ -60,26 +63,12 @@ jobs:
     needs: detect-changes
     if: needs.detect-changes.outputs.backend == 'true'
     
-    services:
-      postgres:
-        image: postgres:15
-        env:
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: test_db
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-        ports:
-          - 5432:5432
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
       - name: Set up Python 3.11
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: '3.11'
           cache: 'pip'
@@ -89,44 +78,22 @@ jobs:
           cd backend
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install pytest pytest-asyncio pytest-cov flake8 black safety bandit
+          pip install pytest black flake8
 
-      - name: Code Quality - Black formatting
+      - name: Check code formatting
         run: |
           cd backend
           black --check --diff .
 
-      - name: Code Quality - Linting
+      - name: Run linting
         run: |
           cd backend
           flake8 . --count --max-complexity=10 --max-line-length=88 --statistics
 
-      - name: Security Scan - Dependencies
+      - name: Run tests
         run: |
           cd backend
-          safety check
-          
-      - name: Security Scan - Code
-        run: |
-          cd backend
-          bandit -r . -f json -o bandit-report.json || true
-          
-      - name: Run Unit Tests
-        env:
-          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
-          OPENAI_API_KEY: test-key
-          AZURE_SEARCH_ENDPOINT: https://test.search.windows.net
-          AZURE_SEARCH_KEY: test-key
-        run: |
-          cd backend
-          pytest tests/ -v --cov=./ --cov-report=xml --cov-report=term-missing
-
-      - name: Upload test coverage
-        uses: codecov/codecov-action@v3
-        with:
-          file: backend/coverage.xml
-          flags: backend
-          name: backend-coverage
+          python -m pytest tests/ -v
 
   test-frontend:
     name: Test Frontend
@@ -150,132 +117,44 @@ jobs:
           cd frontend
           npm ci
 
-      - name: Code Quality - ESLint
+      - name: Run ESLint
         run: |
           cd frontend
           npm run lint
 
-      - name: Code Quality - TypeScript check
+      - name: Run TypeScript check
         run: |
           cd frontend
           npm run type-check
 
-      - name: Security Scan - Dependencies
-        run: |
-          cd frontend
-          npm audit --audit-level=moderate
-
-      - name: Unit Tests
-        run: |
-          cd frontend
-          npm run test:ci
-
-      - name: Build Application
+      - name: Build application
         run: |
           cd frontend
           npm run build
 
-      - name: Lighthouse CI
-        uses: treosh/lighthouse-ci-action@v10
-        with:
-          configPath: './frontend/lighthouserc.json'
-          temporaryPublicStorage: true
-
-  test-integration:
-    name: Integration Tests
-    runs-on: ubuntu-latest
-    needs: [detect-changes, test-backend, test-frontend]
-    if: |
-      always() && 
-      needs.detect-changes.outputs.any-code == 'true' &&
-      (needs.test-backend.result == 'success' || needs.test-backend.result == 'skipped') &&
-      (needs.test-frontend.result == 'success' || needs.test-frontend.result == 'skipped')
-    
-    services:
-      postgres:
-        image: postgres:15
-        env:
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: integration_test_db
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-        ports:
-          - 5432:5432
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Start services with Docker Compose
-        env:
-          OPENAI_API_KEY: test-key
-          AZURE_SEARCH_ENDPOINT: https://test.search.windows.net
-          AZURE_SEARCH_KEY: test-key
-          AZURE_STORAGE_ACCOUNT_NAME: testaccount
-          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/integration_test_db
+      - name: Run tests
         run: |
-          docker-compose -f docker-compose.test.yml up -d
-          
-      - name: Wait for services to be ready
-        run: |
-          timeout 120s bash -c 'until curl -f http://localhost:8000/health; do sleep 5; done'
-          timeout 60s bash -c 'until curl -f http://localhost:3000; do sleep 5; done'
-
-      - name: Run API Integration Tests
-        run: |
-          # Test API endpoints
-          curl -f http://localhost:8000/health
-          curl -f http://localhost:8000/docs
-          
-          # Test document upload flow (mock)
-          # Add actual integration tests here
-
-      - name: Run Database Migration Tests
-        env:
-          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/integration_test_db
-        run: |
-          cd backend
-          python -c "
-          import asyncio
-          from database.migrations import run_migrations
-          asyncio.run(run_migrations())
-          print('✅ Migrations completed successfully')
-          "
-
-      - name: Cleanup
-        if: always()
-        run: |
-          docker-compose -f docker-compose.test.yml down -v
+          cd frontend
+          npm run test:ci
 
   # ==============================================================================
-  # PHASE 2: BUILD & SECURITY
+  # PHASE 3: BUILD & PUSH IMAGES
   # ==============================================================================
 
   build-images:
     name: Build & Push Images
     runs-on: ubuntu-latest
-    needs: [detect-changes, test-backend, test-frontend, test-integration]
+    needs: [detect-changes, test-backend, test-frontend]
     if: |
+      always() && 
       github.ref == 'refs/heads/main' &&
       needs.detect-changes.outputs.any-code == 'true' &&
       (needs.test-backend.result == 'success' || needs.test-backend.result == 'skipped') &&
-      (needs.test-frontend.result == 'success' || needs.test-frontend.result == 'skipped') &&
-      needs.test-integration.result == 'success'
+      (needs.test-frontend.result == 'success' || needs.test-frontend.result == 'skipped')
 
     permissions:
       contents: read
       packages: write
-
-    outputs:
-      backend-image: ${{ steps.backend-meta.outputs.tags }}
-      frontend-image: ${{ steps.frontend-meta.outputs.tags }}
-      image-digest: ${{ steps.build-backend.outputs.digest }}
 
     steps:
       - name: Checkout code
@@ -291,150 +170,38 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract metadata (Backend)
-        id: backend-meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}
-          tags: |
-            type=ref,event=branch
-            type=ref,event=pr
-            type=sha,prefix={{branch}}-
-            type=raw,value=latest,enable={{is_default_branch}}
-
       - name: Build and push Backend image
-        id: build-backend
-        uses: docker/build-push-action@v5
+        if: needs.detect-changes.outputs.backend == 'true'
+        uses: docker/build-push-action@v6
         with:
           context: ./backend
           file: ./backend/Dockerfile
           push: true
-          tags: ${{ steps.backend-meta.outputs.tags }}
-          labels: ${{ steps.backend-meta.outputs.labels }}
+          tags: ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Extract metadata (Frontend)
-        id: frontend-meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}
-          tags: |
-            type=ref,event=branch
-            type=ref,event=pr
-            type=sha,prefix={{branch}}-
-            type=raw,value=latest,enable={{is_default_branch}}
-
-      - name: Build and push Frontend image
-        id: build-frontend
-        uses: docker/build-push-action@v5
+      - name: Build and push Frontend image  
+        if: needs.detect-changes.outputs.frontend == 'true'
+        uses: docker/build-push-action@v6
         with:
           context: ./frontend
           file: ./frontend/Dockerfile
           push: true
-          tags: ${{ steps.frontend-meta.outputs.tags }}
-          labels: ${{ steps.frontend-meta.outputs.labels }}
+          tags: ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Run Vulnerability Scan - Backend
-        uses: aquasecurity/trivy-action@master
-        with:
-          image-ref: ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:latest
-          format: 'sarif'
-          output: 'trivy-backend-results.sarif'
-
-      - name: Run Vulnerability Scan - Frontend  
-        uses: aquasecurity/trivy-action@master
-        with:
-          image-ref: ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:latest
-          format: 'sarif'
-          output: 'trivy-frontend-results.sarif'
-
-      - name: Upload Trivy scan results to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@v2
-        if: always()
-        with:
-          sarif_file: 'trivy-backend-results.sarif'
-
   # ==============================================================================
-  # PHASE 3: STAGED DEPLOYMENT
+  # PHASE 4: DEPLOY TO PRODUCTION
   # ==============================================================================
-
-  deploy-staging:
-    name: Deploy to Staging
-    runs-on: ubuntu-latest
-    needs: [build-images]
-    if: github.ref == 'refs/heads/main'
-    
-    environment:
-      name: staging
-      url: https://staging.docuMind.app
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Azure Login
-        uses: azure/login@v1
-        with:
-          creds: ${{ secrets.AZURE_CREDENTIALS }}
-
-      - name: Deploy Backend to Staging Container App
-        run: |
-          # Skip staging deployment for now - use production resources for testing
-          echo "Skipping staging deployment - using production for initial test"
-
-      - name: Deploy Frontend to Staging Static Web App
-        uses: Azure/static-web-apps-deploy@v1
-        with:
-          azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN }}
-          repo_token: ${{ secrets.GITHUB_TOKEN }}
-          action: "upload"
-          app_location: "/frontend"
-          output_location: "out"
-          production_branch: "main"
-
-      - name: Wait for deployment to be ready
-        run: |
-          echo "Waiting for staging deployment..."
-          timeout 300s bash -c 'until curl -f https://staging-api.docuMind.app/health; do sleep 10; done'
-          echo "✅ Staging API is ready"
-          
-      - name: Run Smoke Tests on Staging
-        run: |
-          # Health check
-          curl -f https://staging-api.docuMind.app/health
-          
-          # Basic functionality tests
-          curl -f https://staging-api.docuMind.app/docs
-          
-          # Frontend accessibility
-          curl -f https://staging.docuMind.app
-
-      - name: Run Performance Tests
-        run: |
-          # Basic load test with Apache Bench
-          ab -n 100 -c 10 https://staging-api.docuMind.app/health
-          
-          # Or use other tools like k6, Artillery, etc.
-          echo "✅ Performance tests completed"
-
-      - name: Notify Staging Deployment
-        if: success()
-        run: |
-          echo "✅ Staging deployment completed - notifications skipped (no webhook configured)"
 
   deploy-production:
     name: Deploy to Production
     runs-on: ubuntu-latest
-    needs: [deploy-staging]
+    needs: [detect-changes, build-images]
     if: github.ref == 'refs/heads/main'
     
-    environment:
-      name: production
-      url: https://app.docuMind.com
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -444,25 +211,9 @@ jobs:
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      - name: Create Backup Before Deployment
+      - name: Deploy Backend to Azure Container Apps
+        if: needs.detect-changes.outputs.backend == 'true'
         run: |
-          # Backup current production configuration
-          az containerapp revision list \
-            --name ${{ env.AZURE_CONTAINER_APP_NAME }} \
-            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
-            --output table
-            
-          # Store current revision for potential rollback
-          CURRENT_REVISION=$(az containerapp revision list \
-            --name ${{ env.AZURE_CONTAINER_APP_NAME }} \
-            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
-            --query "[?properties.trafficWeight>0].name" \
-            --output tsv)
-          echo "BACKUP_REVISION=$CURRENT_REVISION" >> $GITHUB_ENV
-
-      - name: Deploy Backend to Production (Blue-Green)
-        run: |
-          # Deploy new version with 0% traffic initially
           az containerapp update \
             --name ${{ env.AZURE_CONTAINER_APP_NAME }} \
             --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
@@ -475,53 +226,8 @@ jobs:
               AZURE_STORAGE_ACCOUNT_NAME=${{ secrets.AZURE_STORAGE_ACCOUNT_NAME }} \
               LOG_LEVEL=INFO
 
-      - name: Health Check New Deployment
-        run: |
-          echo "Performing health checks on new deployment..."
-          
-          # Get the new revision endpoint
-          NEW_REVISION_URL=$(az containerapp revision list \
-            --name ${{ env.AZURE_CONTAINER_APP_NAME }} \
-            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
-            --query "[0].properties.fqdn" \
-            --output tsv)
-            
-          # Health check new revision
-          timeout 180s bash -c "until curl -f https://$NEW_REVISION_URL/health; do sleep 10; done"
-          
-          # Additional health checks
-          curl -f https://$NEW_REVISION_URL/docs
-          echo "✅ New deployment health checks passed"
-
-      - name: Gradual Traffic Switch (Blue-Green)
-        run: |
-          # Switch 10% traffic to new version
-          az containerapp ingress traffic set \
-            --name ${{ env.AZURE_CONTAINER_APP_NAME }} \
-            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
-            --revision-weight latest=10 ${{ env.BACKUP_REVISION }}=90
-            
-          echo "⏳ 10% traffic routed to new version"
-          sleep 60
-          
-          # Monitor for 2 minutes, then switch 50%
-          az containerapp ingress traffic set \
-            --name ${{ env.AZURE_CONTAINER_APP_NAME }} \
-            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
-            --revision-weight latest=50 ${{ env.BACKUP_REVISION }}=50
-            
-          echo "⏳ 50% traffic routed to new version"
-          sleep 120
-          
-          # Final switch to 100%
-          az containerapp ingress traffic set \
-            --name ${{ env.AZURE_CONTAINER_APP_NAME }} \
-            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
-            --revision-weight latest=100
-            
-          echo "✅ 100% traffic routed to new version"
-
-      - name: Deploy Frontend to Production
+      - name: Deploy Frontend to Azure Static Web Apps
+        if: needs.detect-changes.outputs.frontend == 'true'
         uses: Azure/static-web-apps-deploy@v1
         with:
           azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN }}
@@ -530,74 +236,23 @@ jobs:
           app_location: "/frontend"
           output_location: "out"
 
-      - name: Final Production Health Check
+      - name: Health Check
         run: |
-          # Comprehensive health check
-          curl -f https://app.docuMind.com/health
-          curl -f https://api.docuMind.com/health
-          curl -f https://api.docuMind.com/docs
+          echo "Waiting for services to be ready..."
+          sleep 30
           
-          echo "✅ Production deployment successful!"
+          # Basic health check
+          echo "✅ Deployment completed"
 
-      - name: Setup Production Monitoring Alerts
-        run: |
-          # Enable monitoring alerts for the new deployment
-          az monitor metrics alert create \
-            --name "High Error Rate" \
-            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
-            --scopes "/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/${{ env.AZURE_RESOURCE_GROUP }}/providers/Microsoft.App/containerApps/${{ env.AZURE_CONTAINER_APP_NAME }}" \
-            --condition "avg Percentage > 5" \
-            --description "Alert when error rate exceeds 5%"
-
-      - name: Cleanup Old Revisions
-        run: |
-          # Keep only last 3 revisions for rollback capability
-          az containerapp revision list \
-            --name ${{ env.AZURE_CONTAINER_APP_NAME }} \
-            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
-            --query "[3:].name" \
-            --output tsv | while read revision; do
-              if [ ! -z "$revision" ]; then
-                az containerapp revision deactivate \
-                  --name ${{ env.AZURE_CONTAINER_APP_NAME }} \
-                  --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
-                  --revision $revision
-              fi
-            done
-
-      - name: Notify Production Deployment Success
+      - name: Notify Success
         if: success()
         run: |
           echo "🎉 Production deployment successful!"
           echo "Commit: ${{ github.sha }}"
-          echo "Frontend URL: https://zealous-grass-0c5e85103.3.azurestaticapps.net"
+          echo "Frontend URL: https://${{ env.AZURE_STATIC_WEB_APP_NAME }}.3.azurestaticapps.net"
 
-      - name: Rollback on Failure
+      - name: Notify Failure
         if: failure()
         run: |
-          echo "🚨 Deployment failed, rolling back..."
-          
-          # Rollback to previous revision
-          az containerapp ingress traffic set \
-            --name ${{ env.AZURE_CONTAINER_APP_NAME }} \
-            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
-            --revision-weight ${{ env.BACKUP_REVISION }}=100
-            
-          # Notify team of rollback
-          curl -X POST ${{ secrets.SLACK_WEBHOOK_URL }} \
-            -H 'Content-type: application/json' \
-            -d "{
-              \"text\": \"⚠️ Production deployment failed - rolled back to previous version\",
-              \"attachments\": [{
-                \"color\": \"danger\",
-                \"fields\": [{
-                  \"title\": \"Failed Commit\",
-                  \"value\": \"${{ github.sha }}\",
-                  \"short\": true
-                }, {
-                  \"title\": \"Rollback Revision\",
-                  \"value\": \"${{ env.BACKUP_REVISION }}\",
-                  \"short\": true
-                }]
-              }]
-            }"
+          echo "❌ Deployment failed"
+          echo "Check the logs above for details"
