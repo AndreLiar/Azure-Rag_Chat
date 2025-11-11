@@ -6,10 +6,6 @@ from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from services.chat_service import ChatService
-from services.document_service import DocumentService
-from services.search_service import SearchService
-
 # Load environment variables
 load_dotenv()
 
@@ -28,10 +24,28 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Initialize services
-search_service = SearchService()
-document_service = DocumentService()
-chat_service = ChatService(search_service)
+# Global service variables
+search_service = None
+document_service = None
+chat_service = None
+
+
+def initialize_services():
+    """Initialize services - called at startup or for testing"""
+    global search_service, document_service, chat_service
+    if search_service is None:
+        from services.chat_service import ChatService
+        from services.document_service import DocumentService
+        from services.search_service import SearchService
+
+        search_service = SearchService()
+        document_service = DocumentService()
+        chat_service = ChatService(search_service)
+
+
+# Initialize services for production
+if os.getenv("TESTING") != "1":
+    initialize_services()
 
 
 class ChatRequest(BaseModel):

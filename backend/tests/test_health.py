@@ -2,10 +2,18 @@
 Basic health check tests for the FastAPI application
 """
 
+import os
+
 import pytest
 from fastapi.testclient import TestClient
-from main import app
 
+# Set testing environment variable before importing main
+# This must happen before main import to avoid service initialization
+os.environ["TESTING"] = "1"
+
+import main  # noqa: E402
+
+app = main.app
 client = TestClient(app)
 
 
@@ -14,6 +22,7 @@ def test_health_endpoint():
     response = client.get("/health")
     assert response.status_code == 200
     assert "status" in response.json()
+    assert response.json()["status"] == "healthy"
 
 
 def test_root_endpoint():
@@ -21,6 +30,7 @@ def test_root_endpoint():
     response = client.get("/")
     assert response.status_code == 200
     assert "message" in response.json()
+    assert response.json()["message"] == "RAG Chat API is running"
 
 
 @pytest.mark.asyncio
