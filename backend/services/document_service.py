@@ -94,7 +94,7 @@ class DocumentService:
         chunks = []
 
         for i in range(0, len(words), chunk_size - overlap):
-            chunk = " ".join(words[i:i + chunk_size])
+            chunk = " ".join(words[i : i + chunk_size])
             if chunk.strip():  # Only add non-empty chunks
                 chunks.append(chunk)
 
