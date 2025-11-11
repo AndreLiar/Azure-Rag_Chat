@@ -224,10 +224,10 @@ jobs:
             --image ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:latest \
             --set-env-vars \
               ENVIRONMENT=production \
-              OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }} \
-              AZURE_SEARCH_ENDPOINT=${{ secrets.AZURE_SEARCH_ENDPOINT }} \
-              AZURE_SEARCH_KEY=${{ secrets.AZURE_SEARCH_KEY }} \
-              AZURE_STORAGE_ACCOUNT_NAME=${{ secrets.AZURE_STORAGE_ACCOUNT_NAME }} \
+              OPENAI_API_KEY="${{ secrets.OPENAI_API_KEY }}" \
+              AZURE_SEARCH_ENDPOINT="${{ secrets.AZURE_SEARCH_ENDPOINT }}" \
+              AZURE_SEARCH_KEY="${{ secrets.AZURE_SEARCH_KEY }}" \
+              AZURE_STORAGE_ACCOUNT_NAME="${{ secrets.AZURE_STORAGE_ACCOUNT_NAME }}" \
               LOG_LEVEL=INFO
 
       - name: Deploy Frontend to Azure Static Web Apps
