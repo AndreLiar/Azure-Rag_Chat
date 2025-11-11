@@ -80,7 +80,7 @@ export default function ChatInterface() {
       <div className="p-4 border-b bg-gray-50 rounded-t-lg">
         <div className="flex items-center space-x-2">
           <MessageSquare className="h-5 w-5 text-blue-600" />
-          <h2 className="font-semibold text-gray-900">Chat with your documents</h2>
+          <h2 className="font-semibold text-gray-900">FineDocChat</h2>
         </div>
       </div>
 
@@ -172,8 +172,8 @@ export default function ChatInterface() {
             onChange={(e) => setInput(e.target.value)}
             onKeyPress={handleKeyPress}
             placeholder="Ask a question about your documents..."
-            className="flex-1 resize-none border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white !text-gray-900"
-            style={{ color: '#111827 !important', caretColor: '#111827' }}
+            className="flex-1 resize-none border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-black"
+            style={{ color: '#000000', WebkitTextFillColor: '#000000' }}
             rows={2}
             disabled={isLoading}
           />
