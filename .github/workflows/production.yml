@@ -200,7 +200,11 @@ jobs:
     name: Deploy to Production
     runs-on: ubuntu-latest
     needs: [detect-changes, build-images]
-    if: github.ref == 'refs/heads/main'
+    if: |
+      always() && 
+      github.ref == 'refs/heads/main' &&
+      needs.detect-changes.outputs.any-code == 'true' &&
+      needs.build-images.result == 'success'
     
     steps:
       - name: Checkout code
