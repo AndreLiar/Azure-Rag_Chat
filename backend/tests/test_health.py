@@ -4,7 +4,6 @@ Basic health check tests for the FastAPI application
 
 import os
 
-import pytest
 from fastapi.testclient import TestClient
 
 # Set testing environment variable before importing main
@@ -33,8 +32,7 @@ def test_root_endpoint():
     assert response.json()["message"] == "RAG Chat API is running"
 
 
-@pytest.mark.asyncio
-async def test_app_startup():
+def test_app_startup():
     """Test that the app can start without errors"""
     # This is a placeholder for actual startup tests
     assert app is not None
