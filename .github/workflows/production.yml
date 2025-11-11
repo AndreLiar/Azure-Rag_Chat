@@ -8,8 +8,8 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  BACKEND_IMAGE_NAME: ${{ github.repository }}-backend
-  FRONTEND_IMAGE_NAME: ${{ github.repository }}-frontend
+  BACKEND_IMAGE_NAME: andreliar/azure-rag-chat-backend
+  FRONTEND_IMAGE_NAME: andreliar/azure-rag-chat-frontend
   AZURE_RESOURCE_GROUP: ragchat12481-rg
   AZURE_CONTAINER_APP_NAME: ragchat12481-backend
   AZURE_STATIC_WEB_APP_NAME: zealous-grass-0c5e85103
