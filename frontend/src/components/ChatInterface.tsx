@@ -1,12 +1,15 @@
 'use client'
 
-import { useState } from 'react'
-import { Send, MessageSquare, Bot, User, BookOpen } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { Send, MessageSquare, Bot, User, BookOpen, Clock } from 'lucide-react'
 import axios from 'axios'
+import { useAuth } from '@/contexts/AuthContext'
 
 interface Message {
+  id?: string
   role: 'user' | 'assistant'
   content: string
+  created_at?: string
   sources?: Array<{
     title: string
     content: string
@@ -26,11 +29,66 @@ interface ChatResponse {
   }>
 }
 
-export default function ChatInterface() {
+interface ChatInterfaceProps {
+  currentConversationId?: string | null
+  onConversationCreated?: (conversationId: string) => void
+}
+
+export default function ChatInterface({ currentConversationId, onConversationCreated }: ChatInterfaceProps) {
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
-  const [conversationId, setConversationId] = useState<string | null>(null)
+  const [isTyping, setIsTyping] = useState(false)
+  const [conversationTitle, setConversationTitle] = useState<string>('')
+  const { token } = useAuth()
+
+  // Load conversation when currentConversationId changes
+  useEffect(() => {
+    if (currentConversationId) {
+      loadConversation(currentConversationId)
+    } else {
+      setMessages([])
+      setConversationTitle('')
+    }
+  }, [currentConversationId])
+
+  const loadConversation = async (conversationId: string) => {
+    try {
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://ragchat12481-backend.gentlecoast-36ec39ac.westeurope.azurecontainerapps.io'
+      const response = await axios.get(`${backendUrl}/conversations/${conversationId}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      })
+
+      const conversation = response.data.conversation
+      setConversationTitle(conversation.title)
+      setMessages(conversation.messages || [])
+    } catch (error) {
+      console.error('Error loading conversation:', error)
+    }
+  }
+
+  const formatMessageTime = (dateString: string) => {
+    try {
+      const date = new Date(dateString)
+      const now = new Date()
+      const diffInMinutes = Math.floor((now.getTime() - date.getTime()) / (1000 * 60))
+      
+      if (diffInMinutes < 1) {
+        return 'Just now'
+      } else if (diffInMinutes < 60) {
+        return `${diffInMinutes}m ago`
+      } else if (diffInMinutes < 1440) { // 24 hours
+        const hours = Math.floor(diffInMinutes / 60)
+        return `${hours}h ago`
+      } else {
+        return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      }
+    } catch {
+      return ''
+    }
+  }
 
   const sendMessage = async () => {
     if (!input.trim()) return
@@ -38,13 +96,18 @@ export default function ChatInterface() {
     const userMessage: Message = { role: 'user', content: input }
     setMessages(prev => [...prev, userMessage])
     setInput('')
+    setIsTyping(false)
     setIsLoading(true)
 
     try {
       const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://ragchat12481-backend.gentlecoast-36ec39ac.westeurope.azurecontainerapps.io'
       const response = await axios.post<ChatResponse>(`${backendUrl}/chat`, {
         message: input,
-        conversation_id: conversationId
+        conversation_id: currentConversationId
+      }, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
       })
 
       const assistantMessage: Message = {
@@ -54,7 +117,11 @@ export default function ChatInterface() {
       }
 
       setMessages(prev => [...prev, assistantMessage])
-      setConversationId(response.data.conversation_id)
+      
+      // Notify parent about new conversation creation
+      if (!currentConversationId && onConversationCreated) {
+        onConversationCreated(response.data.conversation_id)
+      }
     } catch (error) {
       console.error('Error sending message:', error)
       const errorMessage: Message = {
@@ -67,17 +134,28 @@ export default function ChatInterface() {
     }
   }
 
-  const handleKeyPress = (e: React.KeyboardEvent) => {
+  const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
       sendMessage()
     }
   }
 
+  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setInput(e.target.value)
+    
+    // Show typing indicator when user starts typing
+    if (e.target.value.length > 0 && !isTyping) {
+      setIsTyping(true)
+    } else if (e.target.value.length === 0 && isTyping) {
+      setIsTyping(false)
+    }
+  }
+
   return (
-    <div className="flex flex-col h-[calc(100vh-200px)] bg-white rounded-lg shadow-sm border">
+    <div className="flex flex-col h-full bg-white">
       {/* Header */}
-      <div className="p-4 border-b bg-gray-50 rounded-t-lg">
+      <div className="p-4 border-b bg-gray-50">
         <div className="flex items-center space-x-2">
           <MessageSquare className="h-5 w-5 text-blue-600" />
           <h2 className="font-semibold text-gray-900">FineDocChat</h2>
@@ -89,12 +167,14 @@ export default function ChatInterface() {
         {messages.length === 0 ? (
           <div className="text-center text-gray-500 mt-8">
             <Bot className="h-12 w-12 mx-auto mb-4 text-gray-400" />
-            <p className="text-lg font-medium">Start a conversation</p>
+            <p className="text-lg font-medium">
+              {currentConversationId ? 'Continue the conversation' : 'Start a conversation'}
+            </p>
             <p className="text-sm">Upload documents and ask questions about them</p>
           </div>
         ) : (
           messages.map((message, index) => (
-            <div key={index} className="space-y-2">
+            <div key={message.id || index} className="space-y-2">
               <div className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                 <div className={`flex items-start space-x-2 max-w-3xl ${
                   message.role === 'user' ? 'flex-row-reverse space-x-reverse' : ''
@@ -116,6 +196,14 @@ export default function ChatInterface() {
                       : 'bg-gray-100 text-gray-900'
                   }`}>
                     <p className="whitespace-pre-wrap">{message.content}</p>
+                    {message.created_at && (
+                      <div className={`flex items-center space-x-1 mt-2 text-xs ${
+                        message.role === 'user' ? 'text-blue-100' : 'text-gray-500'
+                      }`}>
+                        <Clock className="h-3 w-3" />
+                        <span>{formatMessageTime(message.created_at)}</span>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -146,17 +234,22 @@ export default function ChatInterface() {
           ))
         )}
 
-        {isLoading && (
+        {(isLoading || isTyping) && (
           <div className="flex justify-start">
             <div className="flex items-center space-x-2">
               <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center">
                 <Bot className="h-4 w-4 text-gray-600" />
               </div>
               <div className="bg-gray-100 rounded-lg px-4 py-2">
-                <div className="flex space-x-1">
-                  <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
-                  <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{animationDelay: '0.1s'}}></div>
-                  <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{animationDelay: '0.2s'}}></div>
+                <div className="flex items-center space-x-2">
+                  <div className="flex space-x-1">
+                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
+                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{animationDelay: '0.1s'}}></div>
+                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{animationDelay: '0.2s'}}></div>
+                  </div>
+                  <span className="text-xs text-gray-600">
+                    {isLoading ? 'Thinking...' : 'You are typing...'}
+                  </span>
                 </div>
               </div>
             </div>
@@ -165,12 +258,12 @@ export default function ChatInterface() {
       </div>
 
       {/* Input */}
-      <div className="p-4 border-t bg-gray-50 rounded-b-lg">
+      <div className="p-4 border-t bg-gray-50">
         <div className="flex space-x-2">
           <textarea
             value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyPress={handleKeyPress}
+            onChange={handleInputChange}
+            onKeyDown={handleKeyDown}
             placeholder="Ask a question about your documents..."
             className="flex-1 resize-none border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-black"
             style={{ color: '#000000', WebkitTextFillColor: '#000000' }}

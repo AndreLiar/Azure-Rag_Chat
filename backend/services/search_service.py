@@ -17,16 +17,17 @@ from azure.search.documents.indexes.models import (
 )
 from azure.core.credentials import AzureKeyCredential
 import openai
+from config import config
 
 
 class SearchService:
     def __init__(self):
-        self.search_endpoint = os.getenv("AZURE_SEARCH_ENDPOINT")
-        self.search_key = os.getenv("AZURE_SEARCH_KEY")
+        self.search_endpoint = config.azure_search_endpoint
+        self.search_key = config.azure_search_key
         self.index_name = "documents"
 
         # Initialize OpenAI
-        self.openai_client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+        self.openai_client = openai.OpenAI(api_key=config.openai_api_key)
         self.embedding_model = os.getenv("OPENAI_MODEL_EMBED", "text-embedding-3-small")
 
         # Initialize Azure Search clients

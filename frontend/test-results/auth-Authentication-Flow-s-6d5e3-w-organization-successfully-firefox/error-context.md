@@ -1,0 +1,41 @@
+# Page snapshot
+
+```yaml
+- generic [active] [ref=e1]:
+  - alert [ref=e2]
+  - generic [ref=e4]:
+    - generic [ref=e5]:
+      - img [ref=e8]
+      - heading "FineDocChat" [level=1] [ref=e20]
+      - paragraph [ref=e21]: Create your organization
+    - generic [ref=e22]:
+      - generic [ref=e23]:
+        - generic [ref=e24]: Organization Name
+        - generic [ref=e25]:
+          - img [ref=e26]
+          - textbox "Organization Name" [ref=e38]:
+            - /placeholder: Enter organization name
+            - text: Test Organization 1763794409955
+      - generic [ref=e39]:
+        - generic [ref=e40]: Email
+        - generic [ref=e41]:
+          - img [ref=e42]
+          - textbox "Email" [ref=e45]:
+            - /placeholder: Enter your email
+            - text: test-org-1763794409955@example.com
+      - generic [ref=e46]:
+        - generic [ref=e47]: Password
+        - generic [ref=e48]:
+          - img [ref=e49]
+          - textbox "Password" [ref=e52]:
+            - /placeholder: Enter your password
+            - text: testpassword123
+      - generic [ref=e53]: Registration failed
+      - button "Create Organization" [ref=e54] [cursor=pointer]:
+        - img [ref=e55]
+        - generic [ref=e60]: Create Organization
+      - button "Already have an account? Sign in" [ref=e62] [cursor=pointer]
+    - paragraph [ref=e64]:
+      - strong [ref=e65]: "Note:"
+      - text: Creating an organization will make you the administrator. You can invite team members later.
+```

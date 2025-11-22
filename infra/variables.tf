@@ -62,3 +62,21 @@ variable "openai_api_key" {
   type        = string
   sensitive   = true
 }
+
+variable "postgres_admin_username" {
+  description = "Admin username for the PostgreSQL server"
+  type        = string
+  default     = "pgadmin"
+}
+
+variable "postgres_admin_password" {
+  description = "Admin password for the PostgreSQL server"
+  type        = string
+  sensitive   = true
+}
+
+variable "secret_key" {
+  description = "JWT secret key for the backend application"
+  type        = string
+  sensitive   = true
+}

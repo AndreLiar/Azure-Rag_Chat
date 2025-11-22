@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { Upload, File, Trash2, CheckCircle, AlertCircle, FileText } from 'lucide-react'
 import axios from 'axios'
+import { useAuth } from '@/contexts/AuthContext'
 
 interface Document {
   id: string
@@ -20,6 +21,7 @@ export default function DocumentUpload({ onDocumentUploaded, refreshKey }: Docum
   const [uploading, setUploading] = useState(false)
   const [uploadStatus, setUploadStatus] = useState<{ type: 'success' | 'error', message: string } | null>(null)
   const [dragOver, setDragOver] = useState(false)
+  const { token } = useAuth()
 
   useEffect(() => {
     fetchDocuments()
@@ -28,7 +30,11 @@ export default function DocumentUpload({ onDocumentUploaded, refreshKey }: Docum
   const fetchDocuments = async () => {
     try {
       const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://ragchat12481-backend.gentlecoast-36ec39ac.westeurope.azurecontainerapps.io'
-      const response = await axios.get(`${backendUrl}/documents`)
+      const response = await axios.get(`${backendUrl}/documents`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      })
       setDocuments(response.data.documents)
     } catch (error) {
       console.error('Error fetching documents:', error)
@@ -48,7 +54,8 @@ export default function DocumentUpload({ onDocumentUploaded, refreshKey }: Docum
       const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://ragchat12481-backend.gentlecoast-36ec39ac.westeurope.azurecontainerapps.io'
       await axios.post(`${backendUrl}/upload`, formData, {
         headers: {
-          'Content-Type': 'multipart/form-data'
+          'Content-Type': 'multipart/form-data',
+          'Authorization': `Bearer ${token}`
         }
       })
 
@@ -100,7 +107,11 @@ export default function DocumentUpload({ onDocumentUploaded, refreshKey }: Docum
   const deleteDocument = async (documentId: string) => {
     try {
       const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://ragchat12481-backend.gentlecoast-36ec39ac.westeurope.azurecontainerapps.io'
-      await axios.delete(`${backendUrl}/documents/${documentId}`)
+      await axios.delete(`${backendUrl}/documents/${documentId}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      })
       fetchDocuments()
     } catch (error) {
       console.error('Error deleting document:', error)

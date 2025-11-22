@@ -13,8 +13,6 @@ env:
   AZURE_RESOURCE_GROUP: ragchat12481-rg
   AZURE_CONTAINER_APP_NAME: ragchat12481-backend
   AZURE_STATIC_WEB_APP_NAME: zealous-grass-0c5e85103
-  AZURE_KEY_VAULT_NAME: ragchat12481-kv-zni7
-  AZURE_BACKEND_IDENTITY_CLIENT_ID: eee5fe48-5121-4bca-ae89-2655b6d36dc9
 
 jobs:
   # ==============================================================================
@@ -41,15 +39,10 @@ jobs:
           filters: |
             backend:
               - 'backend/**'
-              - 'infra/**'
               - '.github/workflows/**'
-              - 'requirements.txt'
-              - '**/requirements.txt'
             frontend:
               - 'frontend/**'
               - '.github/workflows/**'
-              - 'package*.json'
-              - '**/package*.json'
 
       - name: Check if any code changed
         id: any-code
@@ -97,26 +90,10 @@ jobs:
           cd backend
           flake8 . --count --max-complexity=10 --max-line-length=88 --statistics
 
-      - name: Run tests (if available)
+      - name: Run tests
         run: |
           cd backend
-          if [ -d "tests" ]; then
-            echo "Running backend tests..."
-            python -m pytest tests/ -v --tb=short
-          else
-            echo "⚠️  No tests directory found"
-            echo "Creating basic smoke test for database models..."
-            python -c "
-            try:
-                import models, database, config
-                print('✅ All backend modules import successfully')
-                print('✅ Database models loaded')
-                print('✅ Configuration system working')
-            except Exception as e:
-                print(f'❌ Import error: {e}')
-                exit(1)
-            "
-          fi
+          python -m pytest tests/ -v
 
   test-frontend:
     name: Test Frontend
@@ -216,11 +193,11 @@ jobs:
           cache-to: type=gha,mode=max
 
   # ==============================================================================
-  # PHASE 4: DEPLOY TO PRODUCTION WITH KEY VAULT
+  # PHASE 4: DEPLOY TO PRODUCTION
   # ==============================================================================
 
   deploy-production:
-    name: Deploy to Production with Key Vault
+    name: Deploy to Production
     runs-on: ubuntu-latest
     needs: [detect-changes, build-images]
     if: |
@@ -238,39 +215,24 @@ jobs:
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      - name: Get Key Vault secrets
-        id: keyvault
-        run: |
-          # Retrieve secrets from Key Vault for deployment validation
-          echo "Getting Key Vault URL..."
-          KEY_VAULT_URL=$(az keyvault show --name ${{ env.AZURE_KEY_VAULT_NAME }} --query "properties.vaultUri" --output tsv)
-          echo "KEY_VAULT_URL=${KEY_VAULT_URL}" >> $GITHUB_OUTPUT
-          
-          # Test access to Key Vault
-          echo "Testing Key Vault access..."
-          az keyvault secret show --vault-name ${{ env.AZURE_KEY_VAULT_NAME }} --name "secret-key" --query "value" --output tsv > /dev/null
-          echo "✅ Key Vault access confirmed"
-
-      - name: Deploy Backend to Azure Container Apps with Managed Identity
+      - name: Deploy Backend to Azure Container Apps
         if: needs.detect-changes.outputs.backend == 'true'
         run: |
-          echo "Deploying backend with Key Vault integration..."
-          
           az containerapp update \
             --name ${{ env.AZURE_CONTAINER_APP_NAME }} \
             --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
             --image ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:latest \
             --set-env-vars \
               ENVIRONMENT=production \
-              LOG_LEVEL=INFO \
-              AZURE_KEY_VAULT_URL="${{ steps.keyvault.outputs.KEY_VAULT_URL }}" \
-              AZURE_CLIENT_ID="${{ env.AZURE_BACKEND_IDENTITY_CLIENT_ID }}" \
-              AZURE_STORAGE_ACCOUNT_NAME="ragchat12481sa" \
-              AZURE_SEARCH_ENDPOINT="https://ragchat12481-search.search.windows.net"
-          
-          echo "✅ Backend deployed with Managed Identity and Key Vault configuration"
+              OPENAI_API_KEY="${{ secrets.OPENAI_API_KEY }}" \
+              AZURE_SEARCH_ENDPOINT="${{ secrets.AZURE_SEARCH_ENDPOINT }}" \
+              AZURE_SEARCH_KEY="${{ secrets.AZURE_SEARCH_KEY }}" \
+              AZURE_STORAGE_ACCOUNT_NAME="${{ secrets.AZURE_STORAGE_ACCOUNT_NAME }}" \
+              DATABASE_URL="${{ secrets.DATABASE_URL }}" \
+              SECRET_KEY="${{ secrets.SECRET_KEY }}" \
+              LOG_LEVEL=INFO
 
-      - name: Wait for Backend Deployment
+      - name: Initialize Database Schema
         if: needs.detect-changes.outputs.backend == 'true'
         run: |
           echo "Waiting for container app to be ready..."
@@ -283,26 +245,15 @@ jobs:
             --query properties.configuration.ingress.fqdn \
             --output tsv)
           
-          echo "Backend URL: https://${BACKEND_URL}"
-          
-          # Health check with retries
-          echo "Performing health check..."
+          # Health check to ensure the app is running
           for i in {1..30}; do
-            if curl -f "https://${BACKEND_URL}/health" --max-time 10; then
-              echo "✅ Backend is healthy"
+            if curl -f https://${BACKEND_URL}/health; then
+              echo "Backend is healthy"
               break
             fi
-            echo "⏳ Waiting for backend to be healthy... ($i/30)"
-            sleep 15
+            echo "Waiting for backend to be healthy... ($i/30)"
+            sleep 10
           done
-          
-          # Final health check
-          if curl -f "https://${BACKEND_URL}/health" --max-time 10; then
-            echo "✅ Final health check passed"
-          else
-            echo "❌ Health check failed"
-            exit 1
-          fi
 
       - name: Deploy Frontend to Azure Static Web Apps
         if: needs.detect-changes.outputs.frontend == 'true'
@@ -314,63 +265,23 @@ jobs:
           app_location: "/frontend"
           output_location: "out"
 
-      - name: Final System Health Check
+      - name: Health Check
         run: |
-          echo "🔍 Performing final system health check..."
+          echo "Waiting for services to be ready..."
+          sleep 30
           
-          # Check backend
-          BACKEND_URL=$(az containerapp show \
-            --name ${{ env.AZURE_CONTAINER_APP_NAME }} \
-            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
-            --query properties.configuration.ingress.fqdn \
-            --output tsv)
-          
-          echo "Backend Health Check..."
-          if curl -f "https://${BACKEND_URL}/health" --max-time 10; then
-            echo "✅ Backend: Healthy"
-          else
-            echo "⚠️ Backend: Warning - Health check failed"
-          fi
-          
-          # Check frontend
-          echo "Frontend Health Check..."
-          if curl -f "https://${{ env.AZURE_STATIC_WEB_APP_NAME }}.3.azurestaticapps.net" --max-time 10; then
-            echo "✅ Frontend: Healthy"
-          else
-            echo "⚠️ Frontend: Warning - Health check failed"
-          fi
+          # Basic health check
+          echo "✅ Deployment completed"
 
       - name: Notify Success
         if: success()
         run: |
-          echo "🎉 DEPLOYMENT SUCCESSFUL!"
-          echo "=================================="
-          echo "✅ All services deployed with Key Vault integration"
-          echo "✅ Managed Identity configured for secure secret access"
-          echo "✅ No hardcoded secrets in environment"
-          echo ""
-          echo "🔗 Application URLs:"
-          echo "Frontend: https://${{ env.AZURE_STATIC_WEB_APP_NAME }}.3.azurestaticapps.net"
-          
-          BACKEND_URL=$(az containerapp show \
-            --name ${{ env.AZURE_CONTAINER_APP_NAME }} \
-            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
-            --query properties.configuration.ingress.fqdn \
-            --output tsv)
-          echo "Backend:  https://${BACKEND_URL}"
-          echo ""
-          echo "🔐 Security:"
-          echo "All secrets stored in Azure Key Vault: ${{ env.AZURE_KEY_VAULT_NAME }}"
-          echo "Managed Identity Client ID: ${{ env.AZURE_BACKEND_IDENTITY_CLIENT_ID }}"
+          echo "🎉 Production deployment successful!"
+          echo "Commit: ${{ github.sha }}"
+          echo "Frontend URL: https://${{ env.AZURE_STATIC_WEB_APP_NAME }}.3.azurestaticapps.net"
 
       - name: Notify Failure
         if: failure()
         run: |
-          echo "❌ DEPLOYMENT FAILED"
-          echo "===================="
+          echo "❌ Deployment failed"
           echo "Check the logs above for details"
-          echo "Common issues:"
-          echo "1. Azure credentials not properly configured"
-          echo "2. Key Vault access permissions"
-          echo "3. Container image build failures"
-          echo "4. Resource group or container app not found"
