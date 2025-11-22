@@ -3,6 +3,7 @@ from typing import Optional, List
 import uuid
 from datetime import datetime
 
+
 class Organization(BaseModel):
     id: uuid.UUID
     name: str
@@ -14,6 +15,7 @@ class Organization(BaseModel):
     class Config:
         from_attributes = True
 
+
 class User(BaseModel):
     id: uuid.UUID
     organization_id: uuid.UUID
@@ -24,14 +26,17 @@ class User(BaseModel):
     class Config:
         from_attributes = True
 
+
 class UserCreate(BaseModel):
     email: str
     password: str
-    name: str # For organization creation
+    name: str  # For organization creation
+
 
 class Token(BaseModel):
     access_token: str
     token_type: str
+
 
 class Document(BaseModel):
     id: uuid.UUID
@@ -46,6 +51,7 @@ class Document(BaseModel):
     class Config:
         from_attributes = True
 
+
 class Conversation(BaseModel):
     id: uuid.UUID
     organization_id: uuid.UUID
@@ -55,6 +61,7 @@ class Conversation(BaseModel):
 
     class Config:
         from_attributes = True
+
 
 class Message(BaseModel):
     id: uuid.UUID
@@ -69,9 +76,11 @@ class Message(BaseModel):
     class Config:
         from_attributes = True
 
+
 class ChatRequest(BaseModel):
     message: str
     conversation_id: Optional[str] = None
+
 
 class ChatResponse(BaseModel):
     response: str

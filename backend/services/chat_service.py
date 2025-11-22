@@ -18,7 +18,10 @@ class ChatService:
         self.chat_model = os.getenv("OPENAI_MODEL_CHAT", "gpt-4o-mini")
 
     async def chat(
-        self, message: str, conversation_id: Optional[str] = None, user_id: Optional[str] = None
+        self,
+        message: str,
+        conversation_id: Optional[str] = None,
+        user_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Process a chat message using RAG with database persistence"""
         tenant_id = get_tenant_id()
@@ -31,7 +34,7 @@ class ChatService:
                 conversation = Conversation(
                     organization_id=tenant_id,
                     user_id=user_id,
-                    title=message[:50] + "..." if len(message) > 50 else message
+                    title=message[:50] + "..." if len(message) > 50 else message,
                 )
                 self.db.add(conversation)
                 await self.db.flush()
@@ -42,7 +45,7 @@ class ChatService:
                     select(Conversation).where(
                         and_(
                             Conversation.id == conversation_id,
-                            Conversation.organization_id == tenant_id
+                            Conversation.organization_id == tenant_id,
                         )
                     )
                 )
@@ -71,7 +74,10 @@ class ChatService:
 
             # Get response from OpenAI
             response = self.openai_client.chat.completions.create(
-                model=self.chat_model, messages=messages, temperature=0.7, max_tokens=1000
+                model=self.chat_model,
+                messages=messages,
+                temperature=0.7,
+                max_tokens=1000,
             )
 
             assistant_response = response.choices[0].message.content
@@ -97,7 +103,7 @@ class ChatService:
                 conversation_id=conversation_id,
                 user_id=user_id,
                 role="user",
-                content=message
+                content=message,
             )
             self.db.add(user_message)
 
@@ -108,7 +114,7 @@ class ChatService:
                 user_id=user_id,
                 role="assistant",
                 content=assistant_response,
-                sources=sources
+                sources=sources,
             )
             self.db.add(assistant_message)
 
@@ -156,7 +162,9 @@ class ChatService:
             f"state this clearly"
         )
 
-    async def _get_conversation_history(self, conversation_id: str) -> List[Dict[str, str]]:
+    async def _get_conversation_history(
+        self, conversation_id: str
+    ) -> List[Dict[str, str]]:
         """Get conversation history from database"""
         result = await self.db.execute(
             select(Message)
@@ -164,11 +172,8 @@ class ChatService:
             .order_by(Message.created_at)
         )
         messages = result.scalars().all()
-        
-        return [
-            {"role": msg.role, "content": msg.content}
-            for msg in messages
-        ]
+
+        return [{"role": msg.role, "content": msg.content} for msg in messages]
 
     async def list_conversations(self, user_id: str = None) -> List[Dict[str, Any]]:
         """List conversations for the current tenant"""
@@ -179,22 +184,24 @@ class ChatService:
         query = select(Conversation).where(Conversation.organization_id == tenant_id)
         if user_id:
             query = query.where(Conversation.user_id == user_id)
-        
+
         query = query.order_by(Conversation.created_at.desc())
-        
+
         result = await self.db.execute(query)
         conversations = result.scalars().all()
-        
+
         return [
             {
                 "id": str(conv.id),
                 "title": conv.title,
-                "created_at": conv.created_at.isoformat() if conv.created_at else None
+                "created_at": conv.created_at.isoformat() if conv.created_at else None,
             }
             for conv in conversations
         ]
 
-    async def create_conversation(self, user_id: str, title: str = None) -> Dict[str, Any]:
+    async def create_conversation(
+        self, user_id: str, title: str = None
+    ) -> Dict[str, Any]:
         """Create a new conversation"""
         tenant_id = get_tenant_id()
         if not tenant_id:
@@ -204,7 +211,7 @@ class ChatService:
             conversation = Conversation(
                 organization_id=tenant_id,
                 user_id=user_id,
-                title=title or "New Conversation"
+                title=title or "New Conversation",
             )
             self.db.add(conversation)
             await self.db.commit()
@@ -212,14 +219,20 @@ class ChatService:
             return {
                 "id": str(conversation.id),
                 "title": conversation.title,
-                "created_at": conversation.created_at.isoformat() if conversation.created_at else None
+                "created_at": (
+                    conversation.created_at.isoformat()
+                    if conversation.created_at
+                    else None
+                ),
             }
 
         except Exception as e:
             await self.db.rollback()
             raise e
 
-    async def get_conversation_with_messages(self, conversation_id: str, user_id: str = None) -> Dict[str, Any]:
+    async def get_conversation_with_messages(
+        self, conversation_id: str, user_id: str = None
+    ) -> Dict[str, Any]:
         """Get conversation with full message history"""
         tenant_id = get_tenant_id()
         if not tenant_id:
@@ -231,12 +244,12 @@ class ChatService:
                 select(Conversation).where(
                     and_(
                         Conversation.id == conversation_id,
-                        Conversation.organization_id == tenant_id
+                        Conversation.organization_id == tenant_id,
                     )
                 )
             )
             conversation = conv_result.scalar_one_or_none()
-            
+
             if not conversation:
                 raise ValueError(f"Conversation {conversation_id} not found")
 
@@ -251,23 +264,31 @@ class ChatService:
             return {
                 "id": str(conversation.id),
                 "title": conversation.title,
-                "created_at": conversation.created_at.isoformat() if conversation.created_at else None,
+                "created_at": (
+                    conversation.created_at.isoformat()
+                    if conversation.created_at
+                    else None
+                ),
                 "messages": [
                     {
                         "id": str(msg.id),
                         "role": msg.role,
                         "content": msg.content,
                         "sources": msg.sources,
-                        "created_at": msg.created_at.isoformat() if msg.created_at else None
+                        "created_at": (
+                            msg.created_at.isoformat() if msg.created_at else None
+                        ),
                     }
                     for msg in messages
-                ]
+                ],
             }
 
         except Exception as e:
             raise e
 
-    async def update_conversation_title(self, conversation_id: str, title: str) -> Dict[str, Any]:
+    async def update_conversation_title(
+        self, conversation_id: str, title: str
+    ) -> Dict[str, Any]:
         """Update conversation title"""
         tenant_id = get_tenant_id()
         if not tenant_id:
@@ -278,12 +299,12 @@ class ChatService:
                 select(Conversation).where(
                     and_(
                         Conversation.id == conversation_id,
-                        Conversation.organization_id == tenant_id
+                        Conversation.organization_id == tenant_id,
                     )
                 )
             )
             conversation = result.scalar_one_or_none()
-            
+
             if not conversation:
                 raise ValueError(f"Conversation {conversation_id} not found")
 
@@ -293,7 +314,11 @@ class ChatService:
             return {
                 "id": str(conversation.id),
                 "title": conversation.title,
-                "created_at": conversation.created_at.isoformat() if conversation.created_at else None
+                "created_at": (
+                    conversation.created_at.isoformat()
+                    if conversation.created_at
+                    else None
+                ),
             }
 
         except Exception as e:
@@ -311,12 +336,12 @@ class ChatService:
                 select(Conversation).where(
                     and_(
                         Conversation.id == conversation_id,
-                        Conversation.organization_id == tenant_id
+                        Conversation.organization_id == tenant_id,
                     )
                 )
             )
             conversation = result.scalar_one_or_none()
-            
+
             if not conversation:
                 raise ValueError(f"Conversation {conversation_id} not found")
 

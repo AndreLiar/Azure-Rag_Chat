@@ -20,7 +20,9 @@ class DocumentService:
         self.search_service = SearchService()
         self.supported_extensions = {".pdf", ".docx", ".txt", ".csv"}
 
-    async def process_document(self, file_path: str, filename: str, uploaded_by_id: str = None) -> str:
+    async def process_document(
+        self, file_path: str, filename: str, uploaded_by_id: str = None
+    ) -> str:
         """Process a document and add it to both database and search index"""
         file_extension = Path(filename).suffix.lower()
         tenant_id = get_tenant_id()
@@ -38,8 +40,8 @@ class DocumentService:
                 filename=filename,
                 blob_url=f"file://{file_path}",  # In production, this would be Azure Blob URL
                 file_size=Path(file_path).stat().st_size,
-                status='processing',
-                uploaded_by=uploaded_by_id
+                status="processing",
+                uploaded_by=uploaded_by_id,
             )
             self.db.add(document)
             await self.db.flush()  # Get the document ID
@@ -52,17 +54,17 @@ class DocumentService:
 
             # Create document chunks in database and prepare for search index
             search_documents = []
-            
+
             for i, chunk_content in enumerate(chunks):
                 # Create database chunk
                 chunk = DocumentChunk(
                     organization_id=tenant_id,
                     document_id=document.id,
                     chunk_index=i,
-                    content=chunk_content
+                    content=chunk_content,
                 )
                 self.db.add(chunk)
-                
+
                 # Prepare for search index
                 search_doc = {
                     "id": f"{document.id}_{i}",
@@ -77,16 +79,16 @@ class DocumentService:
             await self.search_service.add_documents(search_documents)
 
             # Update document status to complete
-            document.status = 'complete'
+            document.status = "complete"
             await self.db.commit()
 
             return str(document.id)
-        
+
         except Exception as e:
             await self.db.rollback()
             # Update document status to failed if it exists
-            if 'document' in locals():
-                document.status = 'failed'
+            if "document" in locals():
+                document.status = "failed"
                 await self.db.commit()
             raise e
 
@@ -155,7 +157,7 @@ class DocumentService:
             select(Document).where(Document.organization_id == tenant_id)
         )
         documents = result.scalars().all()
-        
+
         return [
             {
                 "id": str(doc.id),
@@ -163,7 +165,7 @@ class DocumentService:
                 "source": doc.filename,
                 "status": doc.status,
                 "file_size": doc.file_size,
-                "created_at": doc.created_at.isoformat() if doc.created_at else None
+                "created_at": doc.created_at.isoformat() if doc.created_at else None,
             }
             for doc in documents
         ]
@@ -180,12 +182,12 @@ class DocumentService:
                 select(Document).where(
                     and_(
                         Document.id == document_id,
-                        Document.organization_id == tenant_id
+                        Document.organization_id == tenant_id,
                     )
                 )
             )
             document = result.scalar_one_or_none()
-            
+
             if not document:
                 raise ValueError(f"Document {document_id} not found")
 
@@ -201,7 +203,9 @@ class DocumentService:
                 try:
                     await self.search_service.delete_document(search_chunk_id)
                 except Exception as e:
-                    print(f"Warning: Failed to delete chunk {search_chunk_id} from search index: {e}")
+                    print(
+                        f"Warning: Failed to delete chunk {search_chunk_id} from search index: {e}"
+                    )
 
             # Delete from database (chunks will be deleted via cascade)
             await self.db.delete(document)

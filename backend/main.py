@@ -36,7 +36,12 @@ app = FastAPI(
 # Configure CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000", "http://localhost:3001", "http://127.0.0.1:3001"],  # Local development only
+    allow_origins=[
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://localhost:3001",
+        "http://127.0.0.1:3001",
+    ],  # Local development only
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -44,6 +49,7 @@ app.add_middleware(
 
 # Add Tenant Context Middleware
 app.add_middleware(TenantContextMiddleware)
+
 
 @app.on_event("startup")
 async def create_tables():
@@ -57,14 +63,18 @@ async def create_tables():
         # Don't fail startup completely, allow app to start
         # The init_db.py script can be run separately if needed
 
+
 # Security
 security = HTTPBearer()
 
-async def get_current_user(authorization: str = Header(None), db: AsyncSession = Depends(get_db)) -> User:
+
+async def get_current_user(
+    authorization: str = Header(None), db: AsyncSession = Depends(get_db)
+) -> User:
     """Dependency to get current authenticated user"""
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Not authenticated")
-    
+
     token = authorization.split(" ")[1]
     return await auth_service.get_current_user(token, db)
 
@@ -77,20 +87,25 @@ async def register(user_in: UserCreate, db: AsyncSession = Depends(get_db)):
     user = await auth_service.get_user_by_email(db, user_in.email)
     if user:
         raise HTTPException(status_code=400, detail="Email already registered")
-    
+
     new_user = await auth_service.create_user_and_organization(db, user_in)
-    
+
     access_token = auth_service.create_access_token(
         data={"sub": user_in.email, "organization_id": str(new_user["organization_id"])}
     )
     return {"access_token": access_token, "token_type": "bearer"}
 
+
 @app.post("/auth/login", response_model=Token)
-async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: AsyncSession = Depends(get_db)):
+async def login(
+    form_data: OAuth2PasswordRequestForm = Depends(), db: AsyncSession = Depends(get_db)
+):
     user = await auth_service.get_user_by_email(db, form_data.username)
-    if not user or not auth_service.verify_password(form_data.password, user.password_hash):
+    if not user or not auth_service.verify_password(
+        form_data.password, user.password_hash
+    ):
         raise HTTPException(status_code=401, detail="Incorrect email or password")
-    
+
     access_token = auth_service.create_access_token(
         data={"sub": user.email, "organization_id": str(user.organization_id)}
     )
@@ -109,7 +124,7 @@ async def root():
 async def health():
     """Comprehensive health check"""
     health_status = {"status": "healthy", "version": "1.1.0", "checks": {}}
-    
+
     # Check database connectivity
     try:
         async with engine.begin() as conn:
@@ -118,21 +133,25 @@ async def health():
     except Exception as e:
         health_status["checks"]["database"] = f"unhealthy: {str(e)}"
         health_status["status"] = "unhealthy"
-    
+
     # Check OpenAI API key
-    health_status["checks"]["openai_key"] = "configured" if os.getenv("OPENAI_API_KEY") else "missing"
-    
+    health_status["checks"]["openai_key"] = (
+        "configured" if os.getenv("OPENAI_API_KEY") else "missing"
+    )
+
     # Check Azure Search
-    health_status["checks"]["azure_search"] = "configured" if os.getenv("AZURE_SEARCH_ENDPOINT") else "missing"
-    
+    health_status["checks"]["azure_search"] = (
+        "configured" if os.getenv("AZURE_SEARCH_ENDPOINT") else "missing"
+    )
+
     return health_status
 
 
 @app.post("/upload")
 async def upload_document(
-    file: UploadFile = File(...), 
+    file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
 ):
     """Upload and process a document for indexing"""
     document_service = DocumentService(db)
@@ -144,7 +163,9 @@ async def upload_document(
             buffer.write(content)
 
         # Process and index the document
-        result = await document_service.process_document(temp_path, file.filename, str(current_user.id))
+        result = await document_service.process_document(
+            temp_path, file.filename, str(current_user.id)
+        )
 
         # Clean up temp file
         os.remove(temp_path)
@@ -160,14 +181,16 @@ async def upload_document(
 
 @app.post("/chat", response_model=ChatResponse)
 async def chat(
-    request: ChatRequest, 
+    request: ChatRequest,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
 ):
     """Chat with your documents using RAG"""
     chat_service = ChatService(db)
     try:
-        response = await chat_service.chat(request.message, request.conversation_id, str(current_user.id))
+        response = await chat_service.chat(
+            request.message, request.conversation_id, str(current_user.id)
+        )
         return response
 
     except Exception as e:
@@ -176,8 +199,7 @@ async def chat(
 
 @app.get("/documents")
 async def list_documents(
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)
 ):
     """List all indexed documents for the tenant"""
     document_service = DocumentService(db)
@@ -191,9 +213,9 @@ async def list_documents(
 
 @app.delete("/documents/{document_id}")
 async def delete_document(
-    document_id: str, 
+    document_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
 ):
     """Delete a document from the index"""
     document_service = DocumentService(db)
@@ -204,11 +226,11 @@ async def delete_document(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
 # Conversation management endpoints
 @app.get("/conversations")
 async def list_conversations(
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)
 ):
     """List all conversations for the current user"""
     chat_service = ChatService(db)
@@ -218,55 +240,65 @@ async def list_conversations(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
 @app.post("/conversations")
 async def create_conversation(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    title: str = None
+    title: str = None,
 ):
     """Create a new conversation"""
     chat_service = ChatService(db)
     try:
-        conversation = await chat_service.create_conversation(str(current_user.id), title)
+        conversation = await chat_service.create_conversation(
+            str(current_user.id), title
+        )
         return {"conversation": conversation}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.get("/conversations/{conversation_id}")
 async def get_conversation(
     conversation_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
 ):
     """Get conversation details and message history"""
     chat_service = ChatService(db)
     try:
-        conversation = await chat_service.get_conversation_with_messages(conversation_id, str(current_user.id))
+        conversation = await chat_service.get_conversation_with_messages(
+            conversation_id, str(current_user.id)
+        )
         return {"conversation": conversation}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.put("/conversations/{conversation_id}")
 async def update_conversation(
     conversation_id: str,
     title_data: dict,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
 ):
     """Update conversation title"""
     chat_service = ChatService(db)
     try:
         title = title_data.get("title", "")
-        conversation = await chat_service.update_conversation_title(conversation_id, title)
+        conversation = await chat_service.update_conversation_title(
+            conversation_id, title
+        )
         return {"conversation": conversation}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.delete("/conversations/{conversation_id}")
 async def delete_conversation(
     conversation_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
 ):
     """Delete a conversation"""
     chat_service = ChatService(db)

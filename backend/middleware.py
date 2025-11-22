@@ -5,10 +5,20 @@ from starlette.responses import Response
 from database import tenant_id_context
 from services.auth_service import SECRET_KEY, ALGORITHM
 
+
 class TenantContextMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
+    async def dispatch(
+        self, request: Request, call_next: RequestResponseEndpoint
+    ) -> Response:
         # Public endpoints that don't require tenant context
-        public_paths = ["/docs", "/openapi.json", "/auth/login", "/auth/register", "/health", "/"]
+        public_paths = [
+            "/docs",
+            "/openapi.json",
+            "/auth/login",
+            "/auth/register",
+            "/health",
+            "/",
+        ]
         if request.url.path in public_paths:
             return await call_next(request)
 
@@ -21,11 +31,13 @@ class TenantContextMiddleware(BaseHTTPMiddleware):
             payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
             tenant_id = payload.get("organization_id")
             if not tenant_id:
-                raise HTTPException(status_code=401, detail="Invalid token: organization_id missing")
-            
+                raise HTTPException(
+                    status_code=401, detail="Invalid token: organization_id missing"
+                )
+
             # Set tenant_id in context variable
             tenant_id_context.set(tenant_id)
-            
+
         except jwt.PyJWTError:
             raise HTTPException(status_code=401, detail="Invalid token")
 
