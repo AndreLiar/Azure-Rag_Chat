@@ -26,6 +26,8 @@ build/
 *.tfstate.*
 .terraform/
 .terraform.lock.hcl
+terraform.tfvars
+!terraform.tfvars.example
 
 # IDE
 .vscode/

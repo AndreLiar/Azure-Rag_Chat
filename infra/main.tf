@@ -43,45 +43,10 @@ resource "azurerm_search_service" "aisearch" {
 }
 
 # ======================================================
-# Azure Database for PostgreSQL
+# Database Configuration (Supabase)
+# Note: Database is now handled by Supabase external service
+# Connection details will be provided via environment variables
 # ======================================================
-resource "azurerm_postgresql_flexible_server" "pg" {
-  name                = "${var.project_name}-pg"
-  resource_group_name = azurerm_resource_group.rg.name
-  location            = var.location
-  version             = "16"  # Updated to version 16 for better pgvector support
-  sku_name            = "B_Standard_B1ms" # Smallest burstable SKU for dev/test
-  administrator_login    = var.postgres_admin_username
-  administrator_password = var.postgres_admin_password
-  storage_mb           = 32768
-  # Removed zone specification - let Azure choose automatically
-  
-  # Enable high availability for production workloads (optional)
-  # high_availability {
-  #   mode = "ZoneRedundant"
-  # }
-}
-
-resource "azurerm_postgresql_flexible_server_database" "db" {
-  name      = "${var.project_name}db"
-  server_id = azurerm_postgresql_flexible_server.pg.id
-  charset   = "UTF8"
-  collation = "en_US.utf8"
-}
-
-# Enable pgvector extension for vector search capabilities
-resource "azurerm_postgresql_flexible_server_configuration" "pgvector" {
-  name      = "shared_preload_libraries"
-  server_id = azurerm_postgresql_flexible_server.pg.id
-  value     = "vector"
-}
-
-resource "azurerm_postgresql_flexible_server_firewall_rule" "allow_azure" {
-  name                = "AllowAllWindowsAzureIps"
-  server_id           = azurerm_postgresql_flexible_server.pg.id
-  start_ip_address    = "0.0.0.0"
-  end_ip_address      = "0.0.0.0"
-}
 
 # ======================================================
 # Key Vault for Secrets Management
@@ -140,9 +105,28 @@ resource "azurerm_key_vault_secret" "azure_search_key" {
   key_vault_id = azurerm_key_vault.kv.id
 }
 
+# Supabase configuration
+resource "azurerm_key_vault_secret" "supabase_url" {
+  name         = "supabase-url"
+  value        = var.supabase_url
+  key_vault_id = azurerm_key_vault.kv.id
+}
+
+resource "azurerm_key_vault_secret" "supabase_anon_key" {
+  name         = "supabase-anon-key"
+  value        = var.supabase_anon_key
+  key_vault_id = azurerm_key_vault.kv.id
+}
+
+resource "azurerm_key_vault_secret" "supabase_service_role_key" {
+  name         = "supabase-service-role-key"
+  value        = var.supabase_service_role_key
+  key_vault_id = azurerm_key_vault.kv.id
+}
+
 resource "azurerm_key_vault_secret" "database_url" {
   name         = "database-url"
-  value        = "postgresql+asyncpg://${azurerm_postgresql_flexible_server.pg.administrator_login}:${var.postgres_admin_password}@${azurerm_postgresql_flexible_server.pg.fqdn}:5432/${azurerm_postgresql_flexible_server_database.db.name}?sslmode=require"
+  value        = var.database_url
   key_vault_id = azurerm_key_vault.kv.id
 }
 
@@ -276,8 +260,13 @@ resource "azurerm_container_app" "backend" {
       }
 
       env {
-        name        = "DATABASE_URL"
-        secret_name = "database-url"
+        name  = "SUPABASE_URL"
+        value = var.supabase_url
+      }
+
+      env {
+        name        = "SUPABASE_ANON_KEY"
+        secret_name = "supabase-anon-key"
       }
 
       env {
@@ -316,8 +305,8 @@ resource "azurerm_container_app" "backend" {
   }
 
   secret {
-    name  = "database-url"
-    value = "postgresql+asyncpg://${azurerm_postgresql_flexible_server.pg.administrator_login}:${var.postgres_admin_password}@${azurerm_postgresql_flexible_server.pg.fqdn}:5432/${azurerm_postgresql_flexible_server_database.db.name}?sslmode=require"
+    name  = "supabase-anon-key"
+    value = var.supabase_anon_key
   }
 
   ingress {

@@ -63,14 +63,25 @@ variable "openai_api_key" {
   sensitive   = true
 }
 
-variable "postgres_admin_username" {
-  description = "Admin username for the PostgreSQL server"
+variable "supabase_url" {
+  description = "Supabase project URL"
   type        = string
-  default     = "pgadmin"
 }
 
-variable "postgres_admin_password" {
-  description = "Admin password for the PostgreSQL server"
+variable "supabase_anon_key" {
+  description = "Supabase anonymous key"
+  type        = string
+  sensitive   = true
+}
+
+variable "supabase_service_role_key" {
+  description = "Supabase service role key"
+  type        = string
+  sensitive   = true
+}
+
+variable "database_url" {
+  description = "PostgreSQL database URL from Supabase"
   type        = string
   sensitive   = true
 }
